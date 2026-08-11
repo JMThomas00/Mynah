@@ -1,0 +1,79 @@
+# Reference/template manifest — one install per persona. Copy this folder's
+# built binary + this file into Concord's Plugins/<Name>/ directory (e.g.
+# Plugins/Burt/, Plugins/Alice/), then edit [plugin].id/name and
+# [process.env] per install. See 10 Projects/AI Passthrough/AI Passthrough -
+# Plan.md in the Obsidian vault for the full design.
+
+[plugin]
+id      = "Burt"
+name    = "Burt"
+version = "0.1.0"
+
+[process]
+restart_on_crash        = true
+max_restarts            = 5
+restart_backoff_seconds = 5
+
+# Persona-specific config lives entirely here, local to this install's own
+# folder — never touches Concord's DB or Settings UI. HERMES_ENDPOINT/
+# HERMES_API_KEY point at this persona's own restricted Hermes gateway
+# profile (see the Plan doc's Part 2g); PERSONA_DOC_PATH is content-writing
+# work, not yet in place. Leave HERMES_ENDPOINT unset to run in echo mode —
+# useful for verifying the relay path with zero Hermes infra.
+[process.env]
+PERSONA_LABEL    = "Burt"
+# HERMES_ENDPOINT  = "http://127.0.0.1:PORT/v1/chat"
+# HERMES_API_KEY   = ""
+# HERMES_TOOLSETS  = "web"
+# PERSONA_DOC_PATH = "persona.md"
+
+[process.entrypoint.windows]
+bin = "aipassthrough-server.exe"
+[process.entrypoint.linux]
+bin = "aipassthrough-server"
+[process.entrypoint.darwin]
+bin = "aipassthrough-server"
+
+[[channel_kind]]
+kind         = "ai_passthrough"
+display_name = "AI Passthrough — Burt"
+icon         = "◆"
+# remote_pane intentionally omitted (defaults false) — this renders as an
+# ordinary text channel, not a custom pane. See App.isRemotePaneChannel on
+# Concord's client side.
+
+  [[channel_kind.create_field]]
+  key     = "rate_limit_burst"
+  label   = "Burst limit (messages)"
+  type    = "number"
+  default = "3"
+
+  [[channel_kind.create_field]]
+  key     = "rate_limit_refill_per_hour"
+  label   = "Refill rate (messages/hour)"
+  type    = "number"
+  default = "20"
+
+[[server_config_field]]
+key     = "mention_enabled"
+label   = "Enable @mention triggering in any channel"
+type    = "boolean"
+default = "false"
+
+[[server_config_field]]
+key     = "mention_trigger"
+label   = "Mention trigger word"
+type    = "text"
+default = "burt"
+
+[[server_config_field]]
+key     = "mention_rate_limit_burst"
+label   = "Mention-mode burst limit"
+type    = "number"
+default = "3"
+
+[[server_config_field]]
+key     = "mention_rate_limit_refill_per_hour"
+label   = "Mention-mode refill rate"
+type    = "number"
+default = "20"
