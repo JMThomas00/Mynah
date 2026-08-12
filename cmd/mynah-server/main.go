@@ -1,4 +1,5 @@
-// Command aipassthrough-server is the AI Passthrough plugin's process: it
+// Command mynah-server is Mynah's process (a Concord plugin for chatting
+// with an LLM-backed persona, formerly named "AI Passthrough"): it
 // speaks Concord's plugin wire protocol and relays chat messages to a
 // restricted Hermes gateway (or, with no HERMES_ENDPOINT configured, a
 // trivial echo responder — useful on its own for verifying the relay path
@@ -13,9 +14,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/JMThomas00/aipassthrough/internal/hermes"
-	"github.com/JMThomas00/aipassthrough/internal/relay"
-	"github.com/JMThomas00/aipassthrough/internal/wire"
+	"github.com/JMThomas00/mynah/internal/hermes"
+	"github.com/JMThomas00/mynah/internal/relay"
+	"github.com/JMThomas00/mynah/internal/wire"
 )
 
 // echoResponder is the step-1 smoke-test backend: no Hermes, no LLM, just
@@ -32,26 +33,26 @@ func main() {
 	pluginID := os.Getenv("CONCORD_PLUGIN_ID")
 	token := os.Getenv("CONCORD_PLUGIN_TOKEN")
 	if wsURL == "" || pluginID == "" || token == "" {
-		log.Fatal("aipassthrough-server: CONCORD_WS_URL, CONCORD_PLUGIN_ID, and CONCORD_PLUGIN_TOKEN must all be set")
+		log.Fatal("mynah-server: CONCORD_WS_URL, CONCORD_PLUGIN_ID, and CONCORD_PLUGIN_TOKEN must all be set")
 	}
 
 	client, err := wire.Dial(wsURL)
 	if err != nil {
-		log.Fatalf("aipassthrough-server: dial %s: %v", wsURL, err)
+		log.Fatalf("mynah-server: dial %s: %v", wsURL, err)
 	}
 	defer client.Close()
 
 	selfUserID, err := client.Identify(token)
 	if err != nil {
-		log.Fatalf("aipassthrough-server: identify: %v", err)
+		log.Fatalf("mynah-server: identify: %v", err)
 	}
-	log.Printf("aipassthrough-server: connected to %s as plugin %s (user %s)", wsURL, pluginID, selfUserID)
+	log.Printf("mynah-server: connected to %s as plugin %s (user %s)", wsURL, pluginID, selfUserID)
 
 	responder := buildResponder()
 
 	srv := relay.New(client, pluginID, selfUserID, responder)
 	if err := srv.Run(); err != nil {
-		log.Fatalf("aipassthrough-server: %v", err)
+		log.Fatalf("mynah-server: %v", err)
 	}
 }
 
@@ -60,12 +61,12 @@ func main() {
 func buildResponder() relay.Responder {
 	endpoint := os.Getenv("HERMES_ENDPOINT")
 	if endpoint == "" {
-		log.Print("aipassthrough-server: no HERMES_ENDPOINT configured — running in echo mode")
+		log.Print("mynah-server: no HERMES_ENDPOINT configured — running in echo mode")
 		return echoResponder{}
 	}
 
 	label := os.Getenv("PERSONA_LABEL")
-	log.Printf("aipassthrough-server: %s persona backed by Hermes gateway at %s", label, endpoint)
+	log.Printf("mynah-server: %s persona backed by Hermes gateway at %s", label, endpoint)
 
 	return hermes.New(hermes.Config{
 		Endpoint: endpoint,

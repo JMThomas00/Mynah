@@ -1,4 +1,4 @@
-module github.com/JMThomas00/aipassthrough
+module github.com/JMThomas00/mynah
 
 go 1.25.6
 

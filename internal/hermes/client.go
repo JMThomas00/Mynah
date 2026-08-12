@@ -30,7 +30,7 @@ var allowedToolsets = map[string]bool{
 
 // Config is this client's connection info — read from the plugin process's
 // own environment ([process.env] in plugin.toml), never from Concord's DB.
-// See cmd/aipassthrough-server/main.go.
+// See cmd/mynah-server/main.go.
 type Config struct {
 	Endpoint string   // e.g. http://127.0.0.1:PORT/v1/chat — HERMES_ENDPOINT
 	APIKey   string   // HERMES_API_KEY

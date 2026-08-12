@@ -2,7 +2,7 @@
 // Concord's plugin wire protocol it actually speaks. It cannot import
 // github.com/concord-chat/concord/internal/protocol directly — Go's
 // internal/ visibility rules only allow imports from within the same module
-// tree, and this plugin (github.com/JMThomas00/aipassthrough) and Concord
+// tree, and this plugin (github.com/JMThomas00/mynah) and Concord
 // are separate modules — so these types are hand-mirrored against
 // d:\Concord\internal\protocol\messages.go's actual field tags, not
 // guessed. Only what this plugin needs is included; see Tukan's own

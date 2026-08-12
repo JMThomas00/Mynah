@@ -1,8 +1,9 @@
-# Reference/template manifest — one install per persona. Copy this folder's
-# built binary + this file into Concord's Plugins/<Name>/ directory (e.g.
-# Plugins/Burt/, Plugins/Alice/), then edit [plugin].id/name and
-# [process.env] per install. See 10 Projects/AI Passthrough/AI Passthrough -
-# Plan.md in the Obsidian vault for the full design.
+# Reference/template manifest for Mynah (formerly "AI Passthrough") — one
+# install per persona. Copy this folder's built binary + this file into
+# Concord's Plugins/<Name>/ directory (e.g. Plugins/Burt/, Plugins/Alice/),
+# then edit [plugin].id/name and [process.env] per install. See
+# 10 Projects/AI Passthrough/AI Passthrough - Plan.md in the Obsidian vault
+# for the full design.
 
 [plugin]
 id      = "Burt"
@@ -28,15 +29,15 @@ PERSONA_LABEL    = "Burt"
 # PERSONA_DOC_PATH = "persona.md"
 
 [process.entrypoint.windows]
-bin = "aipassthrough-server.exe"
+bin = "mynah-server.exe"
 [process.entrypoint.linux]
-bin = "aipassthrough-server"
+bin = "mynah-server"
 [process.entrypoint.darwin]
-bin = "aipassthrough-server"
+bin = "mynah-server"
 
 [[channel_kind]]
-kind         = "ai_passthrough"
-display_name = "AI Passthrough — Burt"
+kind         = "mynah"
+display_name = "Mynah — Burt"
 icon         = "◆"
 # remote_pane intentionally omitted (defaults false) — this renders as an
 # ordinary text channel, not a custom pane. See App.isRemotePaneChannel on

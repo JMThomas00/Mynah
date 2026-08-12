@@ -17,12 +17,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/JMThomas00/aipassthrough/internal/ratelimit"
-	"github.com/JMThomas00/aipassthrough/internal/wire"
+	"github.com/JMThomas00/mynah/internal/ratelimit"
+	"github.com/JMThomas00/mynah/internal/wire"
 )
 
 // Responder answers one message with reply text. The echo-bot smoke test
-// (see cmd/aipassthrough-server) and the real Hermes-backed responder
+// (see cmd/mynah-server) and the real Hermes-backed responder
 // (internal/hermes) both implement this — Server itself doesn't know or
 // care which.
 type Responder interface {
@@ -231,7 +231,7 @@ func stripTrigger(content, trigger string) string {
 // RegisterChannel records a dedicated channel this plugin owns, with its
 // own rate-limit configuration read off the channel's create_field values
 // (rate_limit_burst / rate_limit_refill_per_hour) — called from
-// EventChannelCreate handling in cmd/aipassthrough-server.
+// EventChannelCreate handling in cmd/mynah-server.
 func (s *Server) RegisterChannel(channelID uuid.UUID, pluginConfig map[string]string) {
 	burst := parseIntOr(pluginConfig["rate_limit_burst"], defaultBurst)
 	refill := parseIntOr(pluginConfig["rate_limit_refill_per_hour"], defaultRefillPerHour)
