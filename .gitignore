@@ -1,8 +1,8 @@
 # Compiled binaries (anchored to repo root — bare names would otherwise also
-# match cmd/aipassthrough-server/, silently excluding that package; see
-# D:\Tukan's own history of this exact bug)
-/aipassthrough-server
-/aipassthrough-server.exe
+# match cmd/mynah-server/, silently excluding that package; see D:\Tukan's
+# own history of this exact bug)
+/mynah-server
+/mynah-server.exe
 *.exe~
 
 # Go build cache
