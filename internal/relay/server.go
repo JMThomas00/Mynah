@@ -86,6 +86,8 @@ func (s *Server) handle(msg *wire.Message) {
 		s.handleConfigUpdate(msg.Data)
 	case wire.EventChannelCreate:
 		s.handleChannelCreate(msg.Data)
+	case wire.EventChannelUpdate:
+		s.handleChannelUpdate(msg.Data)
 	}
 }
 
@@ -99,6 +101,25 @@ func (s *Server) handleChannelCreate(data json.RawMessage) {
 	var payload wire.ChannelCreatePayload
 	if err := json.Unmarshal(data, &payload); err != nil {
 		log.Printf("relay: unmarshal channel create: %v", err)
+		return
+	}
+	if payload.Channel == nil || payload.PluginID != s.pluginID {
+		return
+	}
+	s.RegisterChannel(payload.Channel.ID, payload.PluginConfig)
+}
+
+// handleChannelUpdate re-registers a dedicated channel's rate-limit config
+// when an admin edits its create_field values (burst / refill-per-hour)
+// after creation — without this, an edit would silently have no effect
+// until this plugin's process next restarted. Rebuilding via RegisterChannel
+// resets the bucket to full on any update, not just a rate-limit change
+// (Concord doesn't distinguish which fields actually changed) — an
+// acceptable, simple tradeoff, not a correctness issue.
+func (s *Server) handleChannelUpdate(data json.RawMessage) {
+	var payload wire.ChannelUpdatePayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		log.Printf("relay: unmarshal channel update: %v", err)
 		return
 	}
 	if payload.Channel == nil || payload.PluginID != s.pluginID {

@@ -39,6 +39,7 @@ const (
 	EventMessageCreate      EventType = "MESSAGE_CREATE"
 	EventPluginConfigUpdate EventType = "PLUGIN_CONFIG_UPDATE"
 	EventChannelCreate      EventType = "CHANNEL_CREATE"
+	EventChannelUpdate      EventType = "CHANNEL_UPDATE"
 )
 
 // Message is the wire envelope — field names/tags/omitempty must match
@@ -128,21 +129,34 @@ type PluginConfigListPayload struct {
 }
 
 // Channel is a minimal mirror of models.Channel — only the fields this
-// plugin actually reads off a CHANNEL_CREATE event (identifying it as one
-// of this plugin's own "ai_passthrough" channels).
+// plugin actually reads off a CHANNEL_CREATE/CHANNEL_UPDATE event
+// (identifying it as one of this plugin's own "ai_passthrough" channels, and
+// its current create_field values).
 type Channel struct {
-	ID       uuid.UUID `json:"id"`
-	Name     string    `json:"name"`
-	PluginID string    `json:"plugin_id,omitempty"`
+	ID           uuid.UUID         `json:"id"`
+	Name         string            `json:"name"`
+	PluginID     string            `json:"plugin_id,omitempty"`
+	PluginConfig map[string]string `json:"plugin_config,omitempty"`
 }
 
 // ChannelCreatePayload mirrors protocol.ChannelCreatePayload's embedding of
 // *models.Channel — Go's JSON encoding promotes an embedded struct
 // pointer's own fields to the parent object, so embedding *Channel here
 // (not a named field) is required to unmarshal Concord's actual JSON shape.
+// Concord's ChannelCreatePayload additionally declares its own top-level
+// PluginConfig field (distinct from Channel.PluginConfig, which Concord's
+// Channel model didn't carry when this event was first wired up) — that
+// field, not Channel.PluginConfig, is what actually carries the value here.
 type ChannelCreatePayload struct {
 	*Channel
 	PluginConfig map[string]string `json:"plugin_config,omitempty"`
+}
+
+// ChannelUpdatePayload mirrors protocol.ChannelUpdatePayload, which embeds
+// *models.Channel with no separate field of its own — models.Channel now
+// carries PluginConfig directly, so it's promoted straight through here too.
+type ChannelUpdatePayload struct {
+	*Channel
 }
 
 // ReadyPayload is a minimal mirror of protocol.ReadyPayload — only User.ID,
