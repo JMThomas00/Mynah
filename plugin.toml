@@ -16,17 +16,20 @@ restart_on_crash        = true
 max_restarts            = 5
 restart_backoff_seconds = 5
 
-# Persona-specific config lives entirely here, local to this install's own
-# folder — never touches Concord's DB or Settings UI. HERMES_ENDPOINT/
-# HERMES_API_KEY point at this persona's own restricted Hermes gateway
-# profile (see the Plan doc's Part 2g); PERSONA_DOC_PATH is content-writing
-# work, not yet in place. Leave HERMES_ENDPOINT unset to run in echo mode —
-# useful for verifying the relay path with zero Hermes infra.
+# Only genuine local secrets/files live here — never touches Concord's DB
+# or Settings UI. GATEWAY_API_KEY is this install's own credential for
+# whatever AI gateway it's pointed at (Hermes' own API server, OpenClaw,
+# OpenAI, OpenRouter, a local LLM server — anything OpenAI-compatible);
+# PERSONA_DOC_PATH is content-writing work, not yet in place.
+#
+# The gateway endpoint URL and model name are NOT configured here anymore
+# — an admin sets those live via Concord's Settings > Plugins UI
+# (gateway_endpoint/gateway_model below), no file edit or restart needed.
+# Leaving gateway_endpoint blank there runs this install in echo mode —
+# useful for verifying the relay path with zero AI-gateway infra.
 [process.env]
 PERSONA_LABEL    = "Burt"
-# HERMES_ENDPOINT  = "http://127.0.0.1:PORT/v1/chat"
-# HERMES_API_KEY   = ""
-# HERMES_TOOLSETS  = "web"
+# GATEWAY_API_KEY  = ""
 # PERSONA_DOC_PATH = "persona.md"
 
 [process.entrypoint.windows]
@@ -79,3 +82,15 @@ key     = "mention_rate_limit_refill_per_hour"
 label   = "Mention-mode refill rate"
 type    = "number"
 default = "20"
+
+[[server_config_field]]
+key     = "gateway_endpoint"
+label   = "AI gateway endpoint URL"
+type    = "text"
+default = ""
+
+[[server_config_field]]
+key     = "gateway_model"
+label   = "AI gateway model name"
+type    = "text"
+default = ""

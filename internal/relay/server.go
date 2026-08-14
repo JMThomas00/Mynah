@@ -21,18 +21,42 @@ import (
 	"github.com/JMThomas00/mynah/internal/wire"
 )
 
-// Responder answers one message with reply text. The echo-bot smoke test
-// (see cmd/mynah-server) and the real Hermes-backed responder
-// (internal/hermes) both implement this — Server itself doesn't know or
-// care which.
+// Responder answers one message with reply text. internal/gateway's Client
+// implements this (falling back to an echo reply of its own when it has no
+// endpoint configured yet) — Server itself doesn't know or care which
+// backend a Responder actually talks to.
 type Responder interface {
 	Complete(ctx context.Context, channelID, content string) (string, error)
+}
+
+// ConfigurableResponder is implemented by a Responder that wants to learn
+// about this plugin's server_config_field values whenever they change —
+// checked via type assertion in handleConfigUpdate, right alongside the
+// mention-field handling below. Entirely optional; a Responder that
+// doesn't need live config (e.g. a test fake) simply doesn't implement it.
+type ConfigurableResponder interface {
+	UpdateConfig(values map[string]string)
 }
 
 const (
 	defaultBurst         = 3
 	defaultRefillPerHour = 20
-	completeTimeout      = 60 * time.Second
+	// completeTimeout was 60s originally, matched to the echo bot's
+	// near-instant reply and never revisited once a real backend existed.
+	// 2026-08-13, live-verified against Alice: a real agentic reply through
+	// her full toolset/context on local GPU hardware genuinely took over a
+	// minute, hit this deadline mid-request, and Complete() returned
+	// "context deadline exceeded" instead of a real reply — not a backend
+	// failure, just too short a budget for a real model. Raised to 3
+	// minutes; still bounded, just realistic for local-model latency.
+	completeTimeout = 3 * time.Minute
+
+	// typingRefreshInterval must stay comfortably under Concord's own
+	// server-side typing timeout (5s, internal/server/hub.go's
+	// TypingTimeout) — a single OpTypingStart goes stale long before a real
+	// backend call finishes, so this re-sends it periodically for as long
+	// as Complete() is still running.
+	typingRefreshInterval = 3 * time.Second
 )
 
 // dedicatedChannel is what Server tracks per channel it owns.
@@ -150,6 +174,13 @@ func (s *Server) handleConfigUpdate(data json.RawMessage) {
 		refill := parseIntOr(info.ConfigValues["mention_rate_limit_refill_per_hour"], defaultRefillPerHour)
 		s.mentionLimiter = ratelimit.New(burst, refill)
 		s.mentionMu.Unlock()
+
+		// Let the Responder itself pick out whatever it cares about
+		// (gateway_endpoint/gateway_model today) — Server stays backend-
+		// agnostic, never importing internal/gateway to do this.
+		if cr, ok := s.responder.(ConfigurableResponder); ok {
+			cr.UpdateConfig(info.ConfigValues)
+		}
 	}
 }
 
@@ -221,9 +252,8 @@ func (s *Server) handleMessageCreate(data json.RawMessage) {
 		return
 	}
 
-	_ = s.client.Send(wire.OpTypingStart, wire.TypingStartPayload{ChannelID: channelID})
-
 	ctx, cancel := context.WithTimeout(context.Background(), completeTimeout)
+	go s.keepTyping(ctx, channelID)
 	reply, err := s.responder.Complete(ctx, channelID.String(), content)
 	cancel()
 	if err != nil {
@@ -233,6 +263,25 @@ func (s *Server) handleMessageCreate(data json.RawMessage) {
 
 	if err := s.client.Send(wire.OpSendMessage, wire.SendMessagePayload{ChannelID: channelID, Content: reply}); err != nil {
 		log.Printf("relay: failed to send reply: %v", err)
+	}
+}
+
+// keepTyping sends an immediate OpTypingStart, then re-sends it every
+// typingRefreshInterval until ctx is done (Complete returns, or
+// completeTimeout fires) — a real backend call can legitimately take up to
+// completeTimeout, far longer than Concord's 5s typing-indicator expiry, so
+// one send at the start isn't enough to keep it showing for the whole wait.
+func (s *Server) keepTyping(ctx context.Context, channelID uuid.UUID) {
+	_ = s.client.Send(wire.OpTypingStart, wire.TypingStartPayload{ChannelID: channelID})
+	ticker := time.NewTicker(typingRefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = s.client.Send(wire.OpTypingStart, wire.TypingStartPayload{ChannelID: channelID})
+		}
 	}
 }
 

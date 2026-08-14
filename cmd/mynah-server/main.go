@@ -1,32 +1,23 @@
 // Command mynah-server is Mynah's process (a Concord plugin for chatting
-// with an LLM-backed persona, formerly named "AI Passthrough"): it
-// speaks Concord's plugin wire protocol and relays chat messages to a
-// restricted Hermes gateway (or, with no HERMES_ENDPOINT configured, a
-// trivial echo responder — useful on its own for verifying the relay path
-// end-to-end before any Hermes backend exists, per the Plan doc's Part 2
-// sequencing). One install per persona (e.g. Plugins/Burt/, Plugins/Alice/),
-// same binary, different [process.env] in each install's plugin.toml.
+// with an LLM-backed persona, formerly named "AI Passthrough"): it speaks
+// Concord's plugin wire protocol and relays chat messages to an external
+// AI gateway (any OpenAI-compatible /v1/chat/completions endpoint — see
+// internal/gateway), starting in a trivial echo mode until an admin fills
+// in that gateway's endpoint via Concord's own Settings > Plugins UI (no
+// [process.env]/restart needed for that part anymore — only the API key
+// and persona doc path still live there, see buildResponder below). One
+// install per persona (e.g. Plugins/Burt/, Plugins/Alice/), same binary,
+// different [process.env] in each install's plugin.toml.
 package main
 
 import (
-	"context"
 	"log"
 	"os"
-	"strings"
 
-	"github.com/JMThomas00/mynah/internal/hermes"
+	"github.com/JMThomas00/mynah/internal/gateway"
 	"github.com/JMThomas00/mynah/internal/relay"
 	"github.com/JMThomas00/mynah/internal/wire"
 )
-
-// echoResponder is the step-1 smoke-test backend: no Hermes, no LLM, just
-// proves the whole Concord-relay -> plugin -> reply path works end-to-end.
-// Used automatically whenever HERMES_ENDPOINT isn't set.
-type echoResponder struct{}
-
-func (echoResponder) Complete(ctx context.Context, channelID, content string) (string, error) {
-	return "echo: " + content, nil
-}
 
 func main() {
 	wsURL := os.Getenv("CONCORD_WS_URL")
@@ -56,41 +47,40 @@ func main() {
 	}
 }
 
-// buildResponder picks the real Hermes-backed responder when configured,
-// falling back to the echo responder otherwise — see the package doc.
+// buildResponder always constructs one gateway.Client, seeded only with
+// the two things that still have to be local secrets/files
+// (GATEWAY_API_KEY, the persona doc) — endpoint and model are deliberately
+// left empty here. They arrive live over the wire as this plugin's
+// gateway_endpoint/gateway_model server_config_field values (Settings >
+// Plugins), the first push landing shortly after Identify above. Until
+// then, gateway.Client runs in its own built-in echo mode — see its
+// Complete doc. This is why there's no echo/real branch here anymore: the
+// endpoint literally isn't knowable at this point in startup.
 func buildResponder() relay.Responder {
-	endpoint := os.Getenv("HERMES_ENDPOINT")
-	if endpoint == "" {
-		log.Print("mynah-server: no HERMES_ENDPOINT configured — running in echo mode")
-		return echoResponder{}
-	}
-
 	label := os.Getenv("PERSONA_LABEL")
-	log.Printf("mynah-server: %s persona backed by Hermes gateway at %s", label, endpoint)
+	log.Printf("mynah-server: %s persona starting — gateway endpoint/model come from Settings > Plugins; starting in echo mode until configured", label)
 
-	return hermes.New(hermes.Config{
-		Endpoint: endpoint,
-		APIKey:   os.Getenv("HERMES_API_KEY"),
-		Toolsets: parseToolsets(os.Getenv("HERMES_TOOLSETS")),
+	return gateway.New(gateway.Config{
+		APIKey:       os.Getenv("GATEWAY_API_KEY"),
+		SystemPrompt: loadPersonaDoc(),
 	})
 }
 
-// parseToolsets reads a comma-separated HERMES_TOOLSETS env var (e.g.
-// "web,search") — set from this install's own plugin.toml [process.env],
-// itself built from Concord admin-toggled tool_* server_config_fields once
-// Part 2 wires that translation up. Still filtered a second time through
-// hermes.allowedToolsets before ever reaching a real request, regardless of
-// what's in this env var.
-func parseToolsets(raw string) []string {
-	if raw == "" {
-		return nil
+// loadPersonaDoc reads PERSONA_DOC_PATH (relative to this install's own
+// folder — the plugin process's working directory is set to its manifest
+// dir by Concord's supervisor, e.g. Plugins/Burt/) if configured. Missing
+// or unset is not fatal: the persona doc is content-writing work that may
+// not exist yet (Plan Part 2f), and this process should still run — just
+// without persona injection — rather than refuse to start.
+func loadPersonaDoc() string {
+	path := os.Getenv("PERSONA_DOC_PATH")
+	if path == "" {
+		return ""
 	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("mynah-server: PERSONA_DOC_PATH=%s set but unreadable (%v) — running without persona injection", path, err)
+		return ""
 	}
-	return out
+	return string(content)
 }

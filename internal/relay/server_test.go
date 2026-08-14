@@ -1,6 +1,80 @@
 package relay
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"github.com/JMThomas00/mynah/internal/wire"
+)
+
+// fakeConfigurableResponder implements both Responder and
+// ConfigurableResponder, recording the last map it was handed.
+type fakeConfigurableResponder struct {
+	lastValues map[string]string
+}
+
+func (f *fakeConfigurableResponder) Complete(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
+func (f *fakeConfigurableResponder) UpdateConfig(values map[string]string) {
+	f.lastValues = values
+}
+
+func TestHandleConfigUpdateCallsUpdateConfigOnConfigurableResponder(t *testing.T) {
+	responder := &fakeConfigurableResponder{}
+	s := &Server{pluginID: "test-plugin", responder: responder}
+
+	payload := wire.PluginConfigListPayload{
+		Plugins: []wire.PluginInfo{
+			{
+				ID: "test-plugin",
+				ConfigValues: map[string]string{
+					"gateway_endpoint": "http://example.invalid/v1/chat/completions",
+					"gateway_model":    "some-model",
+					"mention_enabled":  "true",
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	s.handleConfigUpdate(data)
+
+	if responder.lastValues["gateway_endpoint"] != "http://example.invalid/v1/chat/completions" {
+		t.Errorf("UpdateConfig gateway_endpoint = %q, want the configured endpoint", responder.lastValues["gateway_endpoint"])
+	}
+	if responder.lastValues["gateway_model"] != "some-model" {
+		t.Errorf("UpdateConfig gateway_model = %q, want %q", responder.lastValues["gateway_model"], "some-model")
+	}
+}
+
+// fakePlainResponder implements only Responder, not ConfigurableResponder.
+type fakePlainResponder struct{}
+
+func (fakePlainResponder) Complete(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
+
+func TestHandleConfigUpdateDoesNotPanicOnPlainResponder(t *testing.T) {
+	s := &Server{pluginID: "test-plugin", responder: fakePlainResponder{}}
+
+	payload := wire.PluginConfigListPayload{
+		Plugins: []wire.PluginInfo{
+			{ID: "test-plugin", ConfigValues: map[string]string{"gateway_endpoint": "http://example.invalid"}},
+		},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	s.handleConfigUpdate(data) // must not panic
+}
 
 func TestStripTrigger(t *testing.T) {
 	tests := []struct {
