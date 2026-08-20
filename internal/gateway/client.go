@@ -66,7 +66,7 @@ func New(cfg Config) *Client {
 		systemPrompt: cfg.SystemPrompt,
 		endpoint:     cfg.Endpoint,
 		model:        cfg.Model,
-		http:         &http.Client{Timeout: 3*time.Minute + 5*time.Second}, // slightly above relay.completeTimeout's 3min so our own context deadline fires first
+		http:         &http.Client{Timeout: 20*time.Minute + 30*time.Second}, // slightly above relay.completeTimeout's 20min so our own context deadline (passed via NewRequestWithContext) always fires first — this is a backstop, not the real deadline
 	}
 }
 
