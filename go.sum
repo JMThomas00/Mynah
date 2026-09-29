@@ -1,3 +1,5 @@
+github.com/JMThomas00/Concord/sdk v0.4.1 h1:2F2jE8BL8U1gsR8tZrYqwr8XnmZ7oPF+BHEGOzVRBxY=
+github.com/JMThomas00/Concord/sdk v0.4.1/go.mod h1:hJyvQwgoXihZyKbGDb9XgPkWZ5gpu02dFY75NH6J1TA=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=

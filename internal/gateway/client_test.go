@@ -3,184 +3,100 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
-func TestCompleteSendsOpenAICompatibleRequest(t *testing.T) {
-	var gotAuth string
-	var gotReq chatCompletionRequest
+func collect(t *testing.T, c *Client, content string) (string, error) {
+	t.Helper()
+	var got strings.Builder
+	err := c.Complete(context.Background(), content, func(s string) { got.WriteString(s) })
+	return got.String(), err
+}
 
+func TestEchoesWithoutAnEndpoint(t *testing.T) {
+	got, err := collect(t, New(Config{}), "hi")
+	if err != nil || got != "echo: hi" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}
+
+// A streaming backend's pieces arrive as they're sent, and the request
+// carries the settings: model, key, persona, stream.
+func TestStreamsServerSentEvents(t *testing.T) {
+	var req chatRequest
+	var auth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
-		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
-			t.Fatalf("decode request: %v", err)
+		auth = r.Header.Get("Authorization")
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &req)
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, piece := range []string{"Here", "'s **bold**", " and\n```go\nx := 1\n```"} {
+			b, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"delta": map[string]string{"content": piece}}}})
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			w.(http.Flusher).Flush()
 		}
-		json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []struct {
-				Message chatMessage `json:"message"`
-			}{
-				{Message: chatMessage{Role: "assistant", Content: "hello back"}},
-			},
-		})
+		fmt.Fprint(w, ": a comment\n\ndata: {\"choices\":[{\"delta\":{}}]}\n\ndata: [DONE]\n\n")
 	}))
 	defer srv.Close()
 
-	c := New(Config{Endpoint: srv.URL, APIKey: "test-key", Model: "burt-model"})
-	reply, err := c.Complete(context.Background(), "channel-123", "hello")
+	c := New(Config{APIKey: "env-key", SystemPrompt: "from the file"})
+	c.UpdateConfig(map[string]string{"gateway_endpoint": srv.URL, "gateway_model": "m1", "gateway_api_key": "secret-key", "persona": "You are Burt."})
+	var pieces []string
+	err := c.Complete(context.Background(), "hello", func(s string) { pieces = append(pieces, s) })
 	if err != nil {
-		t.Fatalf("Complete: %v", err)
+		t.Fatal(err)
 	}
-	if reply != "hello back" {
-		t.Errorf("reply = %q, want %q", reply, "hello back")
+	if len(pieces) != 3 || strings.Join(pieces, "") != "Here's **bold** and\n```go\nx := 1\n```" {
+		t.Fatalf("pieces %q", pieces)
 	}
-	if gotAuth != "Bearer test-key" {
-		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer test-key")
+	if !req.Stream || req.Model != "m1" || auth != "Bearer secret-key" ||
+		len(req.Messages) != 2 || req.Messages[0].Content != "You are Burt." || req.Messages[1].Content != "hello" {
+		t.Fatalf("request %+v, auth %q", req, auth)
 	}
-	if gotReq.Model != "burt-model" {
-		t.Errorf("request model = %q, want %q", gotReq.Model, "burt-model")
-	}
-	if len(gotReq.Messages) != 1 || gotReq.Messages[0].Role != "user" || gotReq.Messages[0].Content != "hello" {
-		t.Errorf("request messages = %+v, want one user message \"hello\"", gotReq.Messages)
+
+	// Clearing the settings falls back to the environment's key and file.
+	c.UpdateConfig(map[string]string{"gateway_endpoint": srv.URL})
+	_, _ = collect(t, c, "again")
+	if auth != "Bearer env-key" || req.Messages[0].Content != "from the file" {
+		t.Fatalf("fallbacks not used: auth %q, system %q", auth, req.Messages[0].Content)
 	}
 }
 
-func TestCompletePrependsSystemPromptWhenConfigured(t *testing.T) {
-	var gotReq chatCompletionRequest
-
+// A backend that ignores "stream" and sends one JSON reply still works.
+func TestAcceptsANonStreamingReply(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&gotReq)
-		json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []struct {
-				Message chatMessage `json:"message"`
-			}{
-				{Message: chatMessage{Role: "assistant", Content: "hi"}},
-			},
-		})
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"choices":[{"message":{"role":"assistant","content":"all at once"}}]}`)
 	}))
 	defer srv.Close()
-
-	c := New(Config{Endpoint: srv.URL, SystemPrompt: "You are Burt, a homelab assistant."})
-	if _, err := c.Complete(context.Background(), "channel-123", "hello"); err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	if len(gotReq.Messages) != 2 {
-		t.Fatalf("got %d messages, want 2 (system + user): %+v", len(gotReq.Messages), gotReq.Messages)
-	}
-	if gotReq.Messages[0].Role != "system" || gotReq.Messages[0].Content != "You are Burt, a homelab assistant." {
-		t.Errorf("first message = %+v, want system prompt", gotReq.Messages[0])
-	}
-	if gotReq.Messages[1].Role != "user" || gotReq.Messages[1].Content != "hello" {
-		t.Errorf("second message = %+v, want user \"hello\"", gotReq.Messages[1])
-	}
-}
-
-func TestCompleteOmitsSystemPromptWhenNotConfigured(t *testing.T) {
-	var gotReq chatCompletionRequest
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&gotReq)
-		json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []struct {
-				Message chatMessage `json:"message"`
-			}{
-				{Message: chatMessage{Role: "assistant", Content: "hi"}},
-			},
-		})
-	}))
-	defer srv.Close()
-
 	c := New(Config{Endpoint: srv.URL})
-	if _, err := c.Complete(context.Background(), "channel-123", "hello"); err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	if len(gotReq.Messages) != 1 || gotReq.Messages[0].Role != "user" {
-		t.Errorf("got %+v, want exactly one user message", gotReq.Messages)
+	if got, err := collect(t, c, "q"); err != nil || got != "all at once" {
+		t.Fatalf("got %q, %v", got, err)
 	}
 }
 
-func TestCompleteErrorsOnNonOKStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"invalid api key"}`))
-	}))
-	defer srv.Close()
-
-	c := New(Config{Endpoint: srv.URL, APIKey: "wrong-key"})
-	if _, err := c.Complete(context.Background(), "channel-123", "hello"); err == nil {
-		t.Fatal("expected an error on 401, got nil")
-	}
-}
-
-func TestCompleteErrorsOnEmptyChoices(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(chatCompletionResponse{})
-	}))
-	defer srv.Close()
-
-	c := New(Config{Endpoint: srv.URL})
-	if _, err := c.Complete(context.Background(), "channel-123", "hello"); err == nil {
-		t.Fatal("expected an error on empty choices, got nil")
-	}
-}
-
-func TestCompleteReturnsEchoWhenEndpointUnset(t *testing.T) {
-	c := New(Config{})
-	reply, err := c.Complete(context.Background(), "channel-123", "hello")
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	if reply != "echo: hello" {
-		t.Errorf("reply = %q, want %q", reply, "echo: hello")
-	}
-}
-
-func TestUpdateConfigChangesEndpointAndModel(t *testing.T) {
-	var gotReq chatCompletionRequest
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&gotReq)
-		json.NewEncoder(w).Encode(chatCompletionResponse{
-			Choices: []struct {
-				Message chatMessage `json:"message"`
-			}{
-				{Message: chatMessage{Role: "assistant", Content: "hi"}},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	c := New(Config{})
-	// Before any config push, it's echo mode.
-	if reply, err := c.Complete(context.Background(), "channel-123", "hello"); err != nil || reply != "echo: hello" {
-		t.Fatalf("before UpdateConfig: reply=%q err=%v, want echo", reply, err)
-	}
-
-	c.UpdateConfig(map[string]string{"gateway_endpoint": srv.URL, "gateway_model": "new-model"})
-
-	if _, err := c.Complete(context.Background(), "channel-123", "hello"); err != nil {
-		t.Fatalf("after UpdateConfig: Complete: %v", err)
-	}
-	if gotReq.Model != "new-model" {
-		t.Errorf("request model = %q, want %q", gotReq.Model, "new-model")
-	}
-}
-
-func TestUpdateConfigMissingKeyFallsBackToEcho(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Error("gateway endpoint should not have been called after UpdateConfig with no gateway_endpoint key")
-	}))
-	defer srv.Close()
-
-	c := New(Config{Endpoint: srv.URL})
-	c.UpdateConfig(map[string]string{"mention_enabled": "true"}) // no gateway_endpoint key at all
-
-	reply, err := c.Complete(context.Background(), "channel-123", "hello")
-	if err != nil {
-		t.Fatalf("Complete: %v", err)
-	}
-	if reply != "echo: hello" {
-		t.Errorf("reply = %q, want echo fallback after a config push with no gateway_endpoint key", reply)
+func TestReportsFailures(t *testing.T) {
+	for name, handler := range map[string]http.HandlerFunc{
+		"status": func(w http.ResponseWriter, r *http.Request) { http.Error(w, "bad key", http.StatusUnauthorized) },
+		"empty": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: [DONE]\n\n")
+		},
+		"error event": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, "data: {\"error\":{\"message\":\"model overloaded\"}}\n\n")
+		},
+	} {
+		srv := httptest.NewServer(handler)
+		_, err := collect(t, New(Config{Endpoint: srv.URL}), "q")
+		srv.Close()
+		if err == nil {
+			t.Errorf("%s: no error", name)
+		}
 	}
 }

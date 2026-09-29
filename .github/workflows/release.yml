@@ -1,0 +1,27 @@
+# Push a tag (git tag v0.1.0 && git push --tags) and this builds mynah for
+# every server OS/CPU and attaches the zips to a GitHub release. Concord
+# admins then install it with just "JMThomas00/mynah" in
+# Server Settings > Plugins; GitHub publishes each file's checksum, which
+# Concord verifies automatically.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: VERSION=${GITHUB_REF_NAME} go run release.go
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip

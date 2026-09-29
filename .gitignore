@@ -1,9 +1,8 @@
-# Compiled binaries (anchored to repo root — bare names would otherwise also
-# match cmd/mynah-server/, silently excluding that package; see D:\Tukan's
-# own history of this exact bug)
+/dist/
+/build/
+/mynah
+/mynah.exe
 /mynah-server
 /mynah-server.exe
 *.exe~
-
-# Go build cache
 *.test

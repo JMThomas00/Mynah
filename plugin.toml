@@ -1,96 +1,99 @@
-# Reference/template manifest for Mynah (formerly "AI Passthrough") — one
-# install per persona. Copy this folder's built binary + this file into
-# Concord's Plugins/<Name>/ directory (e.g. Plugins/Burt/, Plugins/Alice/),
-# then edit [plugin].id/name and [process.env] per install. See
-# 10 Projects/AI Passthrough/AI Passthrough - Plan.md in the Obsidian vault
-# for the full design.
+# Concord reads this to install and run Mynah. Admins never edit it: the
+# settings below appear as forms in Concord (Server Settings > Plugins for
+# server_config_field, the channel's own settings for create_field).
 
 [plugin]
-id      = "Burt"
-name    = "Burt"
+id = "mynah"
+name = "Mynah"
 product = "Mynah"
-version = "0.1.0"
+version = "0.2.0"            # release.go stamps the git tag here
+description = "An AI persona that chats in a channel (or when @mentioned), streaming its replies."
+source_url = "https://github.com/JMThomas00/Mynah"
 
 [process]
-restart_on_crash        = true
-max_restarts            = 5
+restart_on_crash = true
+max_restarts = 5
 restart_backoff_seconds = 5
 
-# Only genuine local secrets/files live here — never touches Concord's DB
-# or Settings UI. GATEWAY_API_KEY is this install's own credential for
-# whatever AI gateway it's pointed at (Hermes' own API server, OpenClaw,
-# OpenAI, OpenRouter, a local LLM server — anything OpenAI-compatible);
-# PERSONA_DOC_PATH is content-writing work, not yet in place.
-#
-# The gateway endpoint URL and model name are NOT configured here anymore
-# — an admin sets those live via Concord's Settings > Plugins UI
-# (gateway_endpoint/gateway_model below), no file edit or restart needed.
-# Leaving gateway_endpoint blank there runs this install in echo mode —
-# useful for verifying the relay path with zero AI-gateway infra.
-[process.env]
-PERSONA_LABEL    = "Burt"
-# GATEWAY_API_KEY  = ""
-# PERSONA_DOC_PATH = "persona.md"
-
-[process.entrypoint.windows]
-bin = "mynah-server.exe"
 [process.entrypoint.linux]
-bin = "mynah-server"
+bin = "mynah"
 [process.entrypoint.darwin]
-bin = "mynah-server"
+bin = "mynah"
+[process.entrypoint.windows]
+bin = "mynah.exe"
 
+# A channel Mynah owns: it answers every message posted there.
 [[channel_kind]]
-kind         = "mynah"
-display_name = "Mynah — Burt"
-icon         = "◆"
-# remote_pane intentionally omitted (defaults false) — this renders as an
-# ordinary text channel, not a custom pane. See App.isRemotePaneChannel on
-# Concord's client side.
+kind = "mynah"
+display_name = "Mynah"
+icon = "◆"
+remote_pane = false
 
   [[channel_kind.create_field]]
-  key     = "rate_limit_burst"
-  label   = "Burst limit (messages)"
-  type    = "number"
+  key = "rate_limit_burst"
+  label = "Burst limit (messages)"
+  type = "number"
   default = "3"
+  help = "How many messages one member can send in a row before waiting for the refill"
 
   [[channel_kind.create_field]]
-  key     = "rate_limit_refill_per_hour"
-  label   = "Refill rate (messages/hour)"
-  type    = "number"
+  key = "rate_limit_refill_per_hour"
+  label = "Refill rate (messages/hour)"
+  type = "number"
   default = "20"
+  help = "How fast each member's allowance comes back"
 
 [[server_config_field]]
-key     = "mention_enabled"
-label   = "Enable @mention triggering in any channel"
-type    = "boolean"
+key = "gateway_endpoint"
+label = "AI endpoint URL"
+type = "text"
+default = ""
+help = "An OpenAI-compatible chat completions URL, e.g. https://api.openai.com/v1/chat/completions. Empty: Mynah just echoes"
+
+[[server_config_field]]
+key = "gateway_model"
+label = "Model"
+type = "text"
+default = ""
+help = "The model name the endpoint expects, e.g. gpt-4o-mini or llama3.2"
+
+[[server_config_field]]
+key = "gateway_api_key"
+label = "API key"
+type = "secret"
+help = "Sent as a Bearer token; leave empty for a local server that needs none"
+
+[[server_config_field]]
+key = "persona"
+label = "Persona"
+type = "text"
+default = ""
+help = "Instructions that define who Mynah is and how it answers (sent as the system prompt)"
+
+[[server_config_field]]
+key = "mention_enabled"
+label = "Answer @mentions in any channel"
+type = "boolean"
 default = "false"
+help = "When on, Mynah also replies wherever someone writes @ and the trigger word"
 
 [[server_config_field]]
-key     = "mention_trigger"
-label   = "Mention trigger word"
-type    = "text"
-default = "burt"
+key = "mention_trigger"
+label = "Mention trigger word"
+type = "text"
+default = "mynah"
+help = "The name people @mention, without the @"
 
 [[server_config_field]]
-key     = "mention_rate_limit_burst"
-label   = "Mention-mode burst limit"
-type    = "number"
+key = "mention_rate_limit_burst"
+label = "Mention burst limit"
+type = "number"
 default = "3"
+help = "Like the channel limit, for @mentions"
 
 [[server_config_field]]
-key     = "mention_rate_limit_refill_per_hour"
-label   = "Mention-mode refill rate"
-type    = "number"
+key = "mention_rate_limit_refill_per_hour"
+label = "Mention refill rate (per hour)"
+type = "number"
 default = "20"
-
-[[server_config_field]]
-key     = "gateway_endpoint"
-label   = "AI gateway endpoint URL"
-type    = "text"
-default = ""
-
-[[server_config_field]]
-key     = "gateway_model"
-label   = "AI gateway model name"
-type    = "text"
-default = ""
+help = "Like the channel refill, for @mentions"
