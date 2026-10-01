@@ -112,6 +112,20 @@ func TestMentionsOnlyWhenEnabledAndTriggerIsStripped(t *testing.T) {
 	}
 }
 
+// With no trigger word set, Mynah answers to its own name: an instance
+// called Alice is @Alice.
+func TestMentionTriggerDefaultsToTheName(t *testing.T) {
+	r := &fakeResponder{pieces: []string{"hi"}}
+	srv, _ := rig(t, r)
+	srv.Settings(map[string]string{"mention_enabled": "true"}) // plugintest names the plugin "plugintest"
+	time.Sleep(100 * time.Millisecond)
+	srv.ChatMessage(uuid.New(), "alex", "@PluginTest what's up?")
+	finalReply(t, srv)
+	if q := r.questions(); len(q) != 1 || q[0] != "what's up?" {
+		t.Fatalf("asked %q", q)
+	}
+}
+
 func TestRateLimitIsPerChannelSetting(t *testing.T) {
 	r := &fakeResponder{pieces: []string{"ok"}}
 	srv, owned := rig(t, r) // burst 2

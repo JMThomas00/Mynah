@@ -7,8 +7,11 @@ id = "mynah"
 name = "Mynah"
 product = "Mynah"
 version = "0.2.0"            # release.go stamps the git tag here
-description = "An AI persona that chats in a channel (or when @mentioned), streaming its replies."
+description = "AI personas that chat in a channel (or when @mentioned), streaming their replies."
 source_url = "https://github.com/JMThomas00/Mynah"
+# One install runs any number of personas ("instances"), each with its own
+# name, settings and channels, added from the plugin's page in Concord.
+instances = true
 
 [process]
 restart_on_crash = true
@@ -72,17 +75,24 @@ help = "Instructions that define who Mynah is and how it answers (sent as the sy
 
 [[server_config_field]]
 key = "mention_enabled"
-label = "Answer @mentions in any channel"
+label = "Answer @mentions"
 type = "boolean"
 default = "false"
-help = "When on, Mynah also replies wherever someone writes @ and the trigger word"
+help = "Off: only in its own channels. On: also when @mentioned (with no channel of its own, it's @mention only)"
+
+[[server_config_field]]
+key = "mention_channels"
+label = "Where @mentions work"
+type = "channel_multi_select"
+default = ""
+help = "One channel, a few, or leave empty for every channel"
 
 [[server_config_field]]
 key = "mention_trigger"
-label = "Mention trigger word"
+label = "Mention name"
 type = "text"
-default = "mynah"
-help = "The name people @mention, without the @"
+default = ""
+help = "What people @mention, without the @. Empty: its own name (e.g. @Alice)"
 
 [[server_config_field]]
 key = "mention_rate_limit_burst"

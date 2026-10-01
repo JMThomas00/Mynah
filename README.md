@@ -31,17 +31,34 @@ You need to be the server owner, or have the **Manage Plugins** permission.
 1. In Concord, open **Server Settings → Plugins** and press **I** (install).
 2. Type `JMThomas00/Mynah` and press Enter. Concord downloads the release for
    the server's system, verifies it and starts it.
-3. Select **Mynah** and press **Enter** for its settings:
+3. Select **Mynah** and press **Enter** to open its page. It lists Mynah's
+   personas ("instances"), starting with the first one, plus every channel
+   they answer in. Press **Enter** on an instance for its settings:
    - **AI endpoint URL** and **Model**: e.g.
      `https://api.openai.com/v1/chat/completions` and `gpt-4o-mini`. Left
      empty, Mynah echoes, which is handy for checking it works.
    - **API key**: stored encrypted; only Mynah ever sees it.
-   - **Persona**: who Mynah is and how it answers (its system prompt).
-   - **Answer @mentions in any channel** and the **trigger word**: with these on,
-     `@mynah what's the capital of Peru?` works in any channel.
-4. Open **Server Settings → Channels**, create a channel, and choose **Mynah** as
-   its type. Mynah answers every message posted there. The channel's
-   options set a per-member rate limit.
+   - **Persona**: who it is and how it answers (its system prompt).
+   - **Answer @mentions**, **Where @mentions work** and **Mention name**: see
+     below.
+4. On the same page, choose **+ New channel** (or create one in **Server
+   Settings → Channels** with **Mynah** as its type). Under **Configure…** pick
+   which instance answers there, plus a per-member rate limit. It answers
+   every message posted in that channel.
+
+### Where each persona answers
+
+Each instance can have channels of its own, answer @mentions, or both:
+
+| You want | Its own channel | Answer @mentions |
+|---|---|---|
+| A channel just for it | yes | off |
+| @mentions only | none | on |
+| Both (hybrid) | yes | on |
+
+**Where @mentions work** picks the channels: one, a handful, or none picked
+for every channel. People mention it by name (`@Alice what's the capital of
+Peru?`); set **Mention name** to use a different word.
 
 Replies are queued and answered one at a time, so a single local model is
 never asked to generate two at once. While it thinks, the channel shows
@@ -52,13 +69,19 @@ Enter.
 
 ### Several personas on one server
 
-Each install is one persona, and installing from Settings > Plugins gives
-you one Mynah per server. A second persona (say "Burt" beside "Alice") needs
-a second copy of the plugin folder with a different `[plugin].id` in its
-`plugin.toml`, placed by hand and then picked up with **S** (rescan); each
-copy gets its own settings, persona and channels, grouped under Mynah in
-Settings > Plugins. Installing extra personas from the UI isn't supported
-yet.
+On Mynah's page, **+ Add instance** asks for a name and starts another
+persona (say "Burt" beside "Alice"). It runs separately, with its own
+settings and channels. **N** renames one, **R** restarts it, **T** turns it off
+and on, and **X** (twice) removes it. Its channels and settings are kept, so
+adding it again with the same name brings them back. Everywhere in chat it
+shows as its own name; Mynah is only the plugin's name. Updating Mynah
+updates every instance.
+
+Instances need a Concord server from 2026-09-30 or later. Before that,
+each extra persona was a hand-made copy of the plugin folder with its own
+`[plugin].id`. In **Settings → Plugins**, select such a copy and press **M** to
+turn it into an instance. It keeps its account, channels and settings,
+apart from the API key, which you enter again.
 
 ## Develop
 
@@ -68,7 +91,7 @@ go test ./...         # tests, including a fake Concord server (sdk/plugintest)
 go run release.go     # the release zips, in dist/
 ```
 
-Release a version by pushing a tag: `git tag v0.2.0 && git push --tags`.
+Release a version by pushing a tag: `git tag v0.3.0 && git push --tags`.
 
 - `internal/gateway`: the OpenAI-compatible client (streamed server-sent
   events, or one JSON reply from servers that don't stream).

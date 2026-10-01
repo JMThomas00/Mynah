@@ -1,7 +1,7 @@
 // Package relay is Mynah's plugin logic: answer chat messages with a
 // Responder (an AI backend), streaming the reply into the channel as it's
 // written. Messages arrive two ways: every message in a channel Mynah owns,
-// or an @mention of its trigger word anywhere (when an admin enables it).
+// or an @mention of its name (or trigger word) where an admin allows it.
 package relay
 
 import (
@@ -105,6 +105,11 @@ func (s *Server) onConfig(_ *plugin.Conn, info wire.PluginInfo) {
 	s.mu.Lock()
 	s.mentionEnabled = v["mention_enabled"] == "true"
 	s.mentionTrigger = strings.TrimPrefix(strings.TrimSpace(v["mention_trigger"]), "@")
+	if s.mentionTrigger == "" {
+		// Concord answers mentions of the instance's own name ("@Alice")
+		// when no trigger word is set.
+		s.mentionTrigger = info.Name
+	}
 	s.mentionLimiter = ratelimit.New(intOr(v["mention_rate_limit_burst"], defaultBurst), intOr(v["mention_rate_limit_refill_per_hour"], defaultRefillPerHour))
 	s.mu.Unlock()
 	if cr, ok := s.responder.(ConfigurableResponder); ok {
