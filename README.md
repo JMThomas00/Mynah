@@ -102,3 +102,7 @@ Release a version by pushing a tag: `git tag v0.3.0 && git push --tags`.
 Installs from before v0.2.0 kept the API key in `plugin.toml`
 (`GATEWAY_API_KEY`) and the persona in a file (`PERSONA_DOC_PATH`); both still
 work, and the settings above take precedence.
+
+## License
+
+MIT License — see LICENSE file for details.
