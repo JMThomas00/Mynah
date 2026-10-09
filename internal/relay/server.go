@@ -152,7 +152,7 @@ func (s *Server) answerSafely(j job) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("relay: recovered panic answering a message: %v", r)
-			_ = j.c.SendMessage(j.msg.ChannelID, FailedReply, nil)
+			_ = say(j.c, j.msg, FailedReply, nil)
 		}
 	}()
 	s.answer(j)
@@ -195,6 +195,7 @@ func (s *Server) answer(j job) {
 		replyTo = &m.ID // in a busy channel, show what's being answered
 	}
 	stream := c.Stream(ctx, m.ChannelID, replyTo)
+	stream.ThreadID = m.ThreadID // mentioned inside a thread: answer there
 	var writeErr error
 	err := s.responder.Complete(ctx, content, func(text string) {
 		stopTyping()
@@ -206,7 +207,7 @@ func (s *Server) answer(j job) {
 	switch {
 	case err != nil && strings.TrimSpace(stream.Text()) == "" && writeErr == nil:
 		log.Printf("relay: no reply for channel %s: %v", m.ChannelID, err)
-		_ = c.SendMessage(m.ChannelID, FailedReply, replyTo)
+		_ = say(c, m, FailedReply, replyTo)
 	case err != nil:
 		log.Printf("relay: reply for channel %s cut off: %v", m.ChannelID, err)
 		_ = stream.Write(cutOffNote)
@@ -253,4 +254,13 @@ func intOr(s string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// say posts text where m was said: in its thread, if it was posted in one,
+// or in the channel.
+func say(c *plugin.Conn, m wire.MessageCreatePayload, text string, replyTo *uuid.UUID) error {
+	if m.ChatMessage != nil && m.ThreadID != nil {
+		return c.SendThreadMessage(m.ChannelID, *m.ThreadID, text)
+	}
+	return c.SendMessage(m.ChannelID, text, replyTo)
 }

@@ -155,3 +155,17 @@ func TestFailuresSayWhatHappened(t *testing.T) {
 		t.Fatalf("cut-off reply %+v", got)
 	}
 }
+
+// Mentioned inside a thread, Mynah answers in that thread, not the channel.
+func TestAMentionInAThreadIsAnsweredThere(t *testing.T) {
+	r := &fakeResponder{pieces: []string{"right here"}}
+	srv, _ := rig(t, r)
+	srv.Settings(map[string]string{"mention_enabled": "true", "mention_trigger": "Mynah"})
+	time.Sleep(100 * time.Millisecond)
+	general, thread := uuid.New(), uuid.New()
+	srv.ThreadChatMessage(general, thread, "alex", "@mynah you in here?")
+	got := srv.NextChat()
+	if got.ChannelID != general || got.ThreadID == nil || *got.ThreadID != thread {
+		t.Fatalf("the answer went to channel %s thread %v, want thread %s", got.ChannelID, got.ThreadID, thread)
+	}
+}
